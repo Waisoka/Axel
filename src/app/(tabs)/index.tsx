@@ -1,9 +1,11 @@
-import '../../global.css';
 import {SafeAreaView} from "react-native-safe-area-context";
-import {Text, View, StyleSheet} from "react-native";
+import {View, StyleSheet} from "react-native";
 import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 import {Skeleton} from "@/components/ui/skeleton";
 import {TextColors} from "@/constants/text-colors";
+import {Button} from "@/components/ui/button";
+import {Text} from '@/components/ui/text';
+import {Link} from "expo-router";
 
 export default function HomeScreen() {
     return (
@@ -27,15 +29,6 @@ export default function HomeScreen() {
                         </Text>
                         <Text style={styles.description} className="text-sm font-medium leading-tight text-sub">
                             Hello ReactNative
-                        </Text>
-                    </View>
-                </View>
-
-                {/*Main Card*/}
-                <View className="flex-1 rounded-3xl bg-white">
-                    <View className="p-4">
-                        <Text style={[styles.appTitle]} className="font-medium uppercase">
-                            Axel Desktop Robot
                         </Text>
                     </View>
                 </View>
