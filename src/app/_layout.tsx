@@ -2,6 +2,8 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import '../global.css'
+import {PortalHost} from "@rn-primitives/portal";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,5 +22,7 @@ export default function RootLayout() {
 
     if (!loaded && !error) return null;
 
-    return <Stack screenOptions={{headerShown: false}} />;
+    return <Stack screenOptions={{headerShown: false}}>
+        <PortalHost/>
+    </Stack>;
 }
