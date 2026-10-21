@@ -8,7 +8,8 @@
     "scheme": "axelapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.anonymous.axel-app"
     },
     "android": {
       "adaptiveIcon": {

@@ -1,11 +1,9 @@
 import {SafeAreaView} from "react-native-safe-area-context";
 import {View, StyleSheet} from "react-native";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
-import {Skeleton} from "@/components/ui/skeleton";
+import {Avatar, AvatarImage} from "@/components/ui/avatar";
 import {TextColors} from "@/constants/text-colors";
-import {Button} from "@/components/ui/button";
 import {Text} from '@/components/ui/text';
-import {Link} from "expo-router";
+import SignOutButton from "@/features/auth/components/sign-out-button";
 
 export default function HomeScreen() {
     return (
@@ -17,11 +15,6 @@ export default function HomeScreen() {
                     <Avatar style={styles.avatarSize} alt="User Profile's Avatar">
                         <AvatarImage
                             source={{uri: 'https://i.pinimg.com/1200x/2a/3a/1e/2a3a1e85135db15d5cdd591f4437d480.jpg'}}/>
-                        <AvatarFallback>
-                            <View>
-                                <Skeleton className="w-10 h-10 rounded-full animate-pulse"/>
-                            </View>
-                        </AvatarFallback>
                     </Avatar>
                     <View className='flex-1 flex-col items-start'>
                         <Text className="text-xl font-medium leading-tight">
