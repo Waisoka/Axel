@@ -11,7 +11,7 @@ type HintRowProps = {
   hint?: ReactNode;
 };
 
-export function HintRow({ title = 'Try editing', hint = 'app/home.tsx' }: HintRowProps) {
+export function HintRow({ title = 'Try editing', hint = 'app/index.tsx' }: HintRowProps) {
   return (
     <View style={styles.stepRow}>
       <ThemedText type="small">{title}</ThemedText>
