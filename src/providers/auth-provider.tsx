@@ -11,10 +11,10 @@ export default function AuthProvider({ children }: PropsWithChildren) {
         let mounted = true
 
         const init = async () => {
-            const { data, error } = await supabase.auth.getClaims()
-            if (error) console.error('Error fetching claims:', error)
+            const { data, error } = await supabase.auth.getSession()
+            if (error) console.error('Error fetching session:', error)
             if (!mounted) return
-            setClaims(data?.claims ?? null)
+            setClaims(data?.session?.user ?? null)
             setIsLoading(false)
         }
 
@@ -33,8 +33,8 @@ export default function AuthProvider({ children }: PropsWithChildren) {
 
             setTimeout(async () => {
                 if (!mounted) return
-                const { data } = await supabase.auth.getClaims()
-                if (mounted) setClaims(data?.claims ?? null)
+                const { data } = await supabase.auth.getSession()
+                if (mounted) setClaims(data?.session?.user ?? null)
             }, 0)
         })
 
@@ -55,7 +55,7 @@ export default function AuthProvider({ children }: PropsWithChildren) {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
-                .eq('id', claims.sub)
+                .eq('id', claims.id)
                 .maybeSingle()
             if (error) console.error('Error fetching profile:', error)
             if (!cancelled) setProfile(data ?? null)
