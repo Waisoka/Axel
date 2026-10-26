@@ -4,19 +4,22 @@ import {Avatar, AvatarImage} from "@/components/ui/avatar";
 import {TextColors} from "@/constants/text-colors";
 import {Text} from '@/components/ui/text';
 import SignOutButton from "@/features/auth/components/sign-out-button";
+import {Button} from "@/components/ui/button";
+import {Plus} from "lucide-react-native";
+import Foldercomponent from "@/components/folder-component";
 
 export default function HomeScreen() {
     return (
         <SafeAreaView className="flex-1 px-5" edges={["top"]}>
-            <View className="flex-1 flex-col gap-y-4">
+            <View className="flex-1 flex-col gap-y-6">
 
                 {/*User Header*/}
-                <View className="flex-row gap-3">
+                <View className="flex-row gap-3 items-center">
                     <Avatar style={styles.avatarSize} alt="User Profile's Avatar">
                         <AvatarImage
                             source={{uri: 'https://i.pinimg.com/1200x/2a/3a/1e/2a3a1e85135db15d5cdd591f4437d480.jpg'}}/>
                     </Avatar>
-                    <View className='flex-1 flex-col items-start'>
+                    <View className="flex-1 flex-col items-start">
                         <Text className="text-xl font-medium leading-tight">
                             Waisoka
                         </Text>
@@ -25,6 +28,11 @@ export default function HomeScreen() {
                         </Text>
                     </View>
                 </View>
+
+                <View className="flex-row">
+                    <Foldercomponent size="sm"/>
+                </View>
+
             </View>
         </SafeAreaView>
     )
