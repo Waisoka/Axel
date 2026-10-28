@@ -1,77 +1,103 @@
 import React, {useEffect, useState} from "react";
-import {Platform, Pressable, View, ViewStyle, StyleProp} from "react-native";
+import {
+    Platform,
+    Pressable,
+    StyleProp,
+    StyleSheet,
+    useColorScheme,
+    View,
+    ViewStyle,
+} from "react-native";
 import Svg, {Path, Rect} from "react-native-svg";
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withTiming,
-    withDelay,
     Easing,
+    Extrapolation,
+    SharedValue,
+    interpolate,
+    useAnimatedProps,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withTiming,
 } from "react-native-reanimated";
-import {Text} from "@/components/ui/text";
+import {BlurView} from "expo-blur";
+import {MaskedView} from "@expo/ui/community/masked-view";
+import {
+    ContributorStack,
+    type Contributor,
+} from "@/components/contributor-stack";
+
+export type {Contributor};
+
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+type BlurTint = "dark" | "light" | "default";
 
 // ---------------------------------------------------------------------------
 // Themes
-// Color tokens for the folder back, flap (glass layer), and the paper cards.
+// Color tokens for the folder back, flap (glass layer), paper cards and avatars.
 // ---------------------------------------------------------------------------
 const themes = {
     black: {
         backFill: "#000000",
         backBorder: "rgba(255,255,255,0.37)",
         flapFill: "#292929",
-        flapFillOpacity: 0.25,
+        flapFillOpacity: 0.2,
         flapStroke: "#979797",
         cardFill: "#F1F1F1",
         cardStroke: "#E0E0E0",
         cardLineFill: "#D4D4D4",
+        blurTint: "dark" as BlurTint,
+        avatarRing: "rgba(255,255,255,0.6)",
     },
     white: {
         backFill: "#ffffff",
         backBorder: "rgba(178,178,178,0.25)",
         flapFill: "#f5f5f5",
-        flapFillOpacity: 0.85,
+        flapFillOpacity: 0.45,
         flapStroke: "#d4d4d4",
         cardFill: "#262626",
         cardStroke: "#404040",
         cardLineFill: "#737373",
+        blurTint: "light" as BlurTint,
+        avatarRing: "rgba(0,0,0,0.15)",
     },
     blue: {
         backFill: "#50B1FD",
         backBorder: "rgba(255,255,255,0.35)",
         flapFill: "#3a9ae8",
-        flapFillOpacity: 0.45,
+        flapFillOpacity: 0.3,
         flapStroke: "#7ec8ff",
         cardFill: "#F1F1F1",
         cardStroke: "#E0E0E0",
         cardLineFill: "#D4D4D4",
+        blurTint: "default" as BlurTint,
+        avatarRing: "rgba(255,255,255,0.7)",
     },
-} as const;
+};
 
 type Theme = (typeof themes)[keyof typeof themes];
 
 // ---------------------------------------------------------------------------
 // Size & layout constants
-// All geometry is authored at base size and multiplied by the size scale.
 // ---------------------------------------------------------------------------
 const sizeScales = {sm: 0.65, md: 1, lg: 1.35} as const;
 
-const BASE_WIDTH = 321; // Folder back width
-const BASE_HEIGHT = 270; // Folder back height
-const CARD_W = 164; // Paper card width
-const CARD_H = 214; // Paper card height
-const FLAP_H = 241; // Front flap height
+const BASE_WIDTH = 321;
+const BASE_HEIGHT = 270;
+const CARD_W = 164;
+const CARD_H = 214;
+const FLAP_H = 241;
 
-// Extra SVG viewBox padding so strokes are never clipped at the edges
 const PAD = 2;
-const STROKE_W = 1.5; // Flap stroke width
+const STROKE_W = 1.5;
 
-// SVG path of the front flap (rounded rectangle with the tab notch)
 const FLAP_PATH =
     "M0 25C0 11.1929 11.1929 0 25 0H136.084C143.044 0 149.689 2.90139 154.42 8.00608L178.08 33.5343C182.811 38.639 189.456 41.5404 196.416 41.5404H296C309.807 41.5404 321 52.7333 321 66.5404V216C321 229.807 309.807 241 296 241H25C11.1929 241 0 229.807 0 216V25Z";
 
 // ---------------------------------------------------------------------------
 // Animation config
-// Timing with ease-out and no overshoot, so cards never bounce through the folder.
 // ---------------------------------------------------------------------------
 const DURATION = 600;
 const TIMING = {
@@ -79,41 +105,85 @@ const TIMING = {
     easing: Easing.bezier(0.22, 1, 0.36, 1),
 };
 
-type FolderProps = {
-    color?: "black" | "white" | "blue";
+// Flap angles
+const ANGLE_CLOSED = -15;
+const ANGLE_HOVER = -45;
+const ANGLE_OPEN = -55;
+
+// Blur intensity range (closed -> open)
+const BLUR_MIN = 20;
+const BLUR_MAX = 20;
+
+// Flap fill opacity when fully open (near transparent glass)
+const FLAP_FILL_OPEN = 0.04;
+
+// Flap stroke opacity (closed -> open)
+const FLAP_STROKE_CLOSED = 0.7;
+const FLAP_STROKE_OPEN = 1;
+
+// Extra mask width (px) to compensate for edges eaten by dimezisBlurView on Android
+const MASK_BLEED = 2;
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+export type FolderProps = {
+    /** "auto" follows the device theme (dark -> black, light -> blue) */
+    color?: "black" | "white" | "blue" | "auto";
     size?: "sm" | "md" | "lg";
     style?: StyleProp<ViewStyle>;
+    /** Avatar stack shown on the flap */
+    contributors?: Contributor[];
+    /** Max avatars before "+N" */
+    maxVisible?: number;
+    /** Override avatar ring color (hex, rgb, rgba) */
+    avatarRingColor?: string;
+    /** Custom flap content, overrides contributors */
+    flapContent?: React.ReactNode;
+    /** Called when the folder is tapped */
+    onPress?: () => void;
+    /** Called when the open state changes */
+    onOpenChange?: (open: boolean) => void;
 };
 
 // ---------------------------------------------------------------------------
 // Folder (root component)
 // ---------------------------------------------------------------------------
-export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
-    // Resolve theme and size scale
-    const theme = themes[color] ?? themes.black;
+export const Folder = ({
+                           color = "auto",
+                           size = "md",
+                           style,
+                           contributors,
+                           maxVisible = 4,
+                           avatarRingColor,
+                           flapContent,
+                           onPress,
+                           onOpenChange,
+                       }: FolderProps) => {
+    const scheme = useColorScheme();
+
+    const resolvedColor: keyof typeof themes =
+        color === "auto" ? (scheme === "dark" ? "black" : "blue") : color;
+
+    const theme = themes[resolvedColor] ?? themes.black;
     const s = sizeScales[size];
 
-    // Interaction state: hover/press-hold and toggled open
     const [isHovered, setIsHovered] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
 
-    // Scaled dimensions
     const W = BASE_WIDTH * s;
     const H = BASE_HEIGHT * s;
     const flapH = FLAP_H * s;
 
-    // Flap rotation angle (degrees around the X axis)
-    const flapRotate = useSharedValue(-15);
+    const flapRotate = useSharedValue(ANGLE_CLOSED);
 
-    // Animate flap angle: closed -15, hover -45, open -55
     useEffect(() => {
         flapRotate.value = withTiming(
-            isOpen ? -55 : isHovered ? -45 : -15,
+            isOpen ? ANGLE_OPEN : isHovered ? ANGLE_HOVER : ANGLE_CLOSED,
             TIMING
         );
     }, [isOpen, isHovered]);
 
-    // 3D transform for the flap, pivoting around its vertical center
     const flapStyle = useAnimatedStyle(() => ({
         transform: [
             {perspective: 800 * s},
@@ -123,32 +193,53 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
         ],
     }));
 
-    // Clip area for cards: only the bottom edge of the back clips them,
-    // the other sides are oversized so cards can rise freely
+    const baseOpacity = theme.flapFillOpacity;
+
+    // Fill fades to near transparent and stroke gets sharper as the flap opens
+    const flapFillProps = useAnimatedProps(() => ({
+        fillOpacity: interpolate(
+            flapRotate.value,
+            [ANGLE_CLOSED, ANGLE_OPEN],
+            [baseOpacity, FLAP_FILL_OPEN],
+            Extrapolation.CLAMP
+        ),
+        strokeOpacity: interpolate(
+            flapRotate.value,
+            [ANGLE_CLOSED, ANGLE_OPEN],
+            [FLAP_STROKE_CLOSED, FLAP_STROKE_OPEN],
+            Extrapolation.CLAMP
+        ),
+    }));
+
     const CLIP_X = W;
     const CLIP_TOP = H * 2;
 
-    // Props shared by all cards
     const cardProps = {theme, s, isOpen, isHovered};
+    const hasFlapContent =
+        !!flapContent || (!!contributors && contributors.length > 0);
 
     return (
-        // Outer container (centers the folder)
-        <View
-            style={[{alignItems: "center", justifyContent: "center"}, style]}
-        >
-            {/* Touch target: hover on web/pointer devices, press-hold and tap on mobile */}
+        <View style={[{alignItems: "center", justifyContent: "center"}, style]}>
             <Pressable
                 onHoverIn={() => setIsHovered(true)}
                 onHoverOut={() => {
                     setIsHovered(false);
-                    setIsOpen(false);
+                    if (isOpen) {
+                        setIsOpen(false);
+                        onOpenChange?.(false);
+                    }
                 }}
                 onPressIn={() => setIsHovered(true)}
                 onPressOut={() => setIsHovered(false)}
-                onPress={() => setIsOpen((o) => !o)}
+                onPress={() => {
+                    const next = !isOpen;
+                    setIsOpen(next);
+                    onOpenChange?.(next);
+                    onPress?.();
+                }}
                 style={{width: W, height: H}}
             >
-                {/* Back panel: scaled through the SVG viewBox (no transform scale) to keep borders sharp */}
+                {/* Back panel */}
                 <Svg
                     width={(BASE_WIDTH + PAD * 2) * s}
                     height={(BASE_HEIGHT + PAD * 2) * s}
@@ -162,7 +253,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                     }}
                     pointerEvents="none"
                 >
-                    {/* Backfill */}
                     <Rect
                         x={0}
                         y={0}
@@ -171,7 +261,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                         rx={25}
                         fill={theme.backFill}
                     />
-                    {/* Back border, drawn as a separate unfilled layer inside the shape */}
                     <Rect
                         x={1}
                         y={1}
@@ -184,7 +273,7 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                     />
                 </Svg>
 
-                {/* Cards layer: clipped at the back's bottom edge so papers never poke through */}
+                {/* Cards layer */}
                 <View
                     pointerEvents="none"
                     style={{
@@ -196,7 +285,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                         overflow: "hidden",
                     }}
                 >
-                    {/* Re-anchor to the folder's origin inside the oversized clip box */}
                     <View
                         style={{
                             position: "absolute",
@@ -206,7 +294,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                             height: H,
                         }}
                     >
-                        {/* Card 1 (right) */}
                         <AnimatedCard
                             {...cardProps}
                             closed={{y: -10, x: 40, r: 10}}
@@ -215,7 +302,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                             delayOpen={60}
                             delayHover={30}
                         />
-                        {/* Card 2 (center) */}
                         <AnimatedCard
                             {...cardProps}
                             closed={{y: -20, x: 3, r: 2}}
@@ -224,7 +310,6 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                             delayOpen={30}
                             delayHover={15}
                         />
-                        {/* Card 3 (left) */}
                         <AnimatedCard
                             {...cardProps}
                             closed={{y: -22, x: -40, r: -5}}
@@ -236,10 +321,10 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                     </View>
                 </View>
 
-                {/* Front flap: rotates in 3D, drawn above the cards */}
+                {/* Front flap: 3D rotate + blur + fill + content */}
                 <Animated.View
                     pointerEvents="none"
-                    renderToHardwareTextureAndroid
+                    // renderToHardwareTextureAndroid is intentionally omitted (breaks blur on Android)
                     style={[
                         {
                             position: "absolute",
@@ -248,13 +333,21 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                             width: W,
                             height: flapH,
                         },
-                        // Promote to its own compositing layer on web
                         Platform.OS === "web"
                             ? ({willChange: "transform"} as any)
                             : null,
                         flapStyle,
                     ]}
                 >
+                    {/* 1. Blur layer (bottom) */}
+                    <FlapBlur
+                        W={W}
+                        flapH={flapH}
+                        rotate={flapRotate}
+                        tint={theme.blurTint}
+                    />
+
+                    {/* 2. Fill + stroke (fill fades out when open, stroke sharpens) */}
                     <Svg
                         width={(BASE_WIDTH + PAD * 2) * s}
                         height={(FLAP_H + PAD * 2) * s}
@@ -267,17 +360,36 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
                             top: -PAD * s,
                         }}
                     >
-                        {/* Flap shape: translucent fill + stroke */}
-                        <Path
+                        <AnimatedPath
                             d={FLAP_PATH}
                             fill={theme.flapFill}
-                            fillOpacity={theme.flapFillOpacity}
+                            animatedProps={flapFillProps}
                             stroke={theme.flapStroke}
                             strokeWidth={STROKE_W}
                             strokeLinejoin="round"
                             strokeLinecap="round"
                         />
                     </Svg>
+
+                    {/* 3. Flap content (rotates with the flap) */}
+                    {hasFlapContent ? (
+                        <View
+                            style={{
+                                position: "absolute",
+                                left: 20 * s,
+                                bottom: 20 * s,
+                            }}
+                        >
+                            {flapContent ?? (
+                                <ContributorStack
+                                    contributors={contributors!}
+                                    s={s}
+                                    ringColor={avatarRingColor ?? theme.avatarRing}
+                                    maxVisible={maxVisible}
+                                />
+                            )}
+                        </View>
+                    ) : null}
                 </Animated.View>
             </Pressable>
         </View>
@@ -287,11 +399,81 @@ export const Folder = ({color = "black", size = "md", style}: FolderProps) => {
 export default Folder;
 
 // ---------------------------------------------------------------------------
-// AnimatedCard
-// A single paper card that moves between closed / hover / open poses.
+// FlapBlur
+// Blur clipped to the flap shape. Intensity morphs with the flap angle.
 // ---------------------------------------------------------------------------
+const FLAP_MASK_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 321 241' preserveAspectRatio='none'><path d='${FLAP_PATH}' fill='black'/></svg>`
+)}`;
 
-// Card pose: x/y offset (base units) and rotation in degrees
+const FlapBlur = ({
+                      W,
+                      flapH,
+                      rotate,
+                      tint,
+                  }: {
+    W: number;
+    flapH: number;
+    rotate: SharedValue<number>;
+    tint: BlurTint;
+}) => {
+    const animatedProps = useAnimatedProps(() => ({
+        intensity: interpolate(
+            rotate.value,
+            [ANGLE_CLOSED, ANGLE_OPEN],
+            [BLUR_MIN, BLUR_MAX],
+            Extrapolation.CLAMP
+        ),
+    }));
+
+    // Web: apply mask directly on the BlurView (a mask on the parent would break backdrop-filter)
+    if (Platform.OS === "web") {
+        const mask = {
+            maskImage: `url("${FLAP_MASK_URI}")`,
+            WebkitMaskImage: `url("${FLAP_MASK_URI}")`,
+            maskSize: "100% 100%",
+            WebkitMaskSize: "100% 100%",
+            maskRepeat: "no-repeat",
+            WebkitMaskRepeat: "no-repeat",
+        } as any;
+
+        return (
+            <AnimatedBlurView
+                animatedProps={animatedProps}
+                tint={tint}
+                style={[StyleSheet.absoluteFill, mask]}
+            />
+        );
+    }
+
+    // Native: MaskedView with the flap path as the mask
+    return (
+        <MaskedView
+            style={StyleSheet.absoluteFill}
+            maskElement={
+                <Svg
+                    width={W + MASK_BLEED}
+                    height={flapH}
+                    viewBox="0 0 321 241"
+                    preserveAspectRatio="none"
+                >
+                    <Path d={FLAP_PATH} fill="#000"/>
+                </Svg>
+            }
+        >
+            <AnimatedBlurView
+                animatedProps={animatedProps}
+                tint={tint}
+                blurMethod="dimezisBlurView"
+                style={StyleSheet.absoluteFill}
+            />
+        </MaskedView>
+    );
+};
+
+// ---------------------------------------------------------------------------
+// AnimatedCard
+// ---------------------------------------------------------------------------
 type Pose = { y: number; x: number; r: number };
 
 const AnimatedCard = ({
@@ -315,15 +497,12 @@ const AnimatedCard = ({
     delayOpen: number;
     delayHover: number;
 }) => {
-    // Animated position and rotation (size scales offsets)
     const y = useSharedValue(closed.y * s);
     const x = useSharedValue(closed.x * s);
     const r = useSharedValue(closed.r);
 
-    // Animate toward the pose that matches the current state
     useEffect(() => {
         const target = isOpen ? open : isHovered ? hover : closed;
-        // Small stagger when opening/hovering; no delay when closing, so all cards retract together
         const delay = isOpen ? delayOpen : isHovered ? delayHover : 0;
         const run = (v: number) => withDelay(delay, withTiming(v, TIMING));
         y.value = run(target.y * s);
@@ -331,7 +510,6 @@ const AnimatedCard = ({
         r.value = run(target.r);
     }, [isOpen, isHovered, s]);
 
-    // Apply animated transform
     const style = useAnimatedStyle(() => ({
         transform: [
             {translateX: x.value},
@@ -341,7 +519,6 @@ const AnimatedCard = ({
     }));
 
     return (
-        // Card wrapper: centered inside the folder, then offset by the animated transform
         <Animated.View
             pointerEvents="none"
             style={[
@@ -362,15 +539,11 @@ const AnimatedCard = ({
 
 // ---------------------------------------------------------------------------
 // Card
-// Static paper artwork: rounded sheet, title bar, and two columns of text lines.
 // ---------------------------------------------------------------------------
-
-// Y positions of the 9 text rows
 const ROWS = Array.from({length: 9}, (_, i) => 60.99 + i * 14.118);
 
 const Card = ({theme, s}: { theme: Theme; s: number }) => (
     <Svg width={CARD_W * s} height={CARD_H * s} viewBox="0 0 164 214">
-        {/* Paper sheet */}
         <Rect
             x={0.5}
             y={0.5}
@@ -380,7 +553,6 @@ const Card = ({theme, s}: { theme: Theme; s: number }) => (
             fill={theme.cardFill}
             stroke={theme.cardStroke}
         />
-        {/* Title bar */}
         <Rect
             x={14.12}
             y={31.21}
@@ -389,7 +561,6 @@ const Card = ({theme, s}: { theme: Theme; s: number }) => (
             rx={5.94}
             fill={theme.cardLineFill}
         />
-        {/* Text rows: left and right columns */}
         {ROWS.map((y, i) => (
             <React.Fragment key={i}>
                 <Rect
